@@ -2,7 +2,7 @@
 import logging
 import re
 
-from pymongo import MongoClient, ASCENDING
+from pymongo import MongoClient, ASCENDING, DESCENDING
 from pymongo.errors import PyMongoError
 
 
@@ -26,6 +26,74 @@ class MongoDBManager:
         self.collections = {}
 
         logger.info("MongoDB connected successfully")
+        
+    def list_sensors(self):
+        return sorted(
+            self.database.list_collection_names()
+        )
+
+
+    def sensor_exists(self, sensor_id):
+        return sensor_id in self.database.list_collection_names()
+
+
+    def get_latest_reading(self, sensor_id):
+
+        if not self.sensor_exists(sensor_id):
+            return None
+
+        collection = self.database[sensor_id]
+
+        document = collection.find_one(
+            {},
+            sort=[("timestamp", DESCENDING)]
+        )
+
+        if document:
+            document["id"] = str(document.pop("_id"))
+
+        return document
+
+
+    def get_sensor_readings(
+        self,
+        sensor_id,
+        start=None,
+        end=None,
+        limit=100,
+        skip=0
+    ):
+
+        if not self.sensor_exists(sensor_id):
+            return None
+
+        collection = self.database[sensor_id]
+
+        query = {}
+
+        if start or end:
+            query["timestamp"] = {}
+
+            if start:
+                query["timestamp"]["$gte"] = start
+
+            if end:
+                query["timestamp"]["$lte"] = end
+
+        cursor = (
+            collection.find(query)
+            .sort("timestamp", DESCENDING)
+            .skip(skip)
+            .limit(limit)
+        )
+
+        results = []
+
+        for document in cursor:
+            document["id"] = str(document.pop("_id"))
+            results.append(document)
+
+        return results
 
     def get_sensor_collection(self, sensor_id):
 
